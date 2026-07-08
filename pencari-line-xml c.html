@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pencari Line XML - CoreTax</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #f5f4f0;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 24px 16px;
+  }
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e2e0d8;
+    padding: 24px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  p.subtitle {
+    font-size: 13px;
+    color: #6b6a65;
+    margin: 0 0 20px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  button {
+    background: #ffffff;
+    border: 1px solid #c9c7bc;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #1a1a1a;
+  }
+  button:hover { background: #f0efe9; }
+  button.primary {
+    background: #d97757;
+    border-color: #d97757;
+    color: #ffffff;
+    font-weight: 500;
+  }
+  button.primary:hover { background: #c96a4b; }
+  input[type=text], input[type=number], textarea {
+    border: 1px solid #c9c7bc;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  textarea {
+    width: 100%;
+    height: 130px;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    resize: vertical;
+    margin-bottom: 10px;
+  }
+  #lineInput { flex: 1; min-width: 160px; }
+  #contextInput { width: 80px; }
+  #fileName { font-size: 12px; color: #6b6a65; align-self: center; }
+  #results { margin-top: 20px; }
+  .result-block {
+    background: #f5f4f0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .result-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  .error-text { font-size: 13px; color: #b3261e; margin: 0; }
+  .lines-wrap {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+  .line-row {
+    display: flex;
+    gap: 10px;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .line-row.target {
+    background: #fdf0d5;
+  }
+  .line-num {
+    min-width: 40px;
+    text-align: right;
+    color: #999790;
+    user-select: none;
+  }
+  .line-row.target .line-num {
+    color: #b8720f;
+    font-weight: 600;
+  }
+  .line-content {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .tag { color: #b3541e; }
+  .hint {
+    font-size: 12px;
+    color: #999790;
+    margin: 4px 0 0;
+  }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Pencari line XML CoreTax</h1>
+  <p style="font-size:12px; color:#b3541e; font-weight:500; margin:0 0 8px;">by Chlorabyte</p>
+  <p class="subtitle">Tempel error CoreTax (nomor line), langsung lompat ke baris itu tanpa scroll manual. Semua proses di browser sendiri, file tidak dikirim kemana-mana.</p>
+
+  <div class="row">
+    <button id="btnUpload">Upload file XML</button>
+    <input type="file" id="fileInput" accept=".xml,.txt">
+    <span id="fileName"></span>
+  </div>
+
+  <textarea id="xmlInput" placeholder="atau tempel isi XML di sini"></textarea>
+
+  <div class="row">
+    <input type="text" id="lineInput" placeholder="Nomor line, mis. 245 atau 12,88,301">
+    <input type="number" id="contextInput" value="4" min="0" max="20" title="Jumlah baris konteks">
+    <button class="primary" id="btnFind">Cari</button>
+  </div>
+  <p class="hint">Angka di kotak kedua = jumlah baris konteks yang ditampilkan di atas/bawah baris target.</p>
+
+  <div id="results"></div>
+</div>
+
+<script>
+document.getElementById('btnUpload').addEventListener('click', () => {
+  document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('fileName').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    document.getElementById('xmlInput').value = evt.target.result;
+  };
+  reader.readAsText(file);
+});
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlightXml(s) {
+  const escaped = escapeHtml(s);
+  return escaped.replace(/(&lt;\/?[a-zA-Z0-9:_-]+)/g, '<span class="tag">$1</span>')
+                .replace(/(\/?&gt;)/g, '<span class="tag">$1</span>');
+}
+
+document.getElementById('btnFind').addEventListener('click', () => {
+  const raw = document.getElementById('xmlInput').value;
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  if (!raw.trim()) {
+    results.innerHTML = '<p class="error-text">Tempel atau upload isi XML dulu.</p>';
+    return;
+  }
+
+  const lines = raw.split(/\r\n|\r|\n/);
+
+  const lineInputVal = document.getElementById('lineInput').value.trim();
+  const ctx = Math.max(0, parseInt(document.getElementById('contextInput').value) || 0);
+
+  if (!lineInputVal) {
+    results.innerHTML = '<p class="error-text">Masukkan nomor line dari pesan error CoreTax.</p>';
+    return;
+  }
+
+  const targets = lineInputVal.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
+
+  if (targets.length === 0) {
+    results.innerHTML = '<p class="error-text">Format nomor line tidak valid.</p>';
+    return;
+  }
+
+  targets.forEach(target => {
+    const wrap = document.createElement('div');
+    wrap.className = 'result-block';
+
+    if (target > lines.length) {
+      wrap.innerHTML = '<p class="error-text">Line ' + target + ' tidak ada. File hanya punya ' + lines.length + ' baris.</p>';
+      results.appendChild(wrap);
+      return;
+    }
+
+    const start = Math.max(1, target - ctx);
+    const end = Math.min(lines.length, target + ctx);
+
+    let html = '<p class="result-title">Line ' + target + '</p>';
+    html += '<div class="lines-wrap">';
+
+    for (let i = start; i <= end; i++) {
+      const isTarget = i === target;
+      const content = lines[i-1] === undefined ? '' : lines[i-1];
+      html += '<div class="line-row' + (isTarget ? ' target' : '') + '">' +
+                '<span class="line-num">' + i + '</span>' +
+                '<span class="line-content">' + highlightXml(content) + '</span>' +
+              '</div>';
+    }
+
+    html += '</div>';
+    wrap.innerHTML = html;
+    results.appendChild(wrap);
+  });
+});
+
+document.getElementById('lineInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btnFind').click();
+});
+</script>
+</body>
+</html>
